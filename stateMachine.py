@@ -1,6 +1,6 @@
 #!/bin/python3.4
 # coding=utf-8
-# MKA:xkondu00
+#MKA:xkondu00
 
 
 class Redefinition(BaseException):
@@ -12,6 +12,10 @@ class Invalid(BaseException):
 
 
 class MissingRule(BaseException):
+    pass
+
+
+class NotFinishing(BaseException):
     pass
 
 
@@ -40,9 +44,9 @@ class FiniteStateMachine(object):
     def add_rule(self, starting, target, symbol, returning=False):
         if not self.rules_only:
             if (starting not in self.states or
-                    target not in self.states or
-                    symbol not in self.alphabet
-                ):
+                        target not in self.states or
+                        symbol not in self.alphabet
+                    ):
                 raise Invalid("Missing state or symbol in definition")
         else:
             self.add_state(starting)
@@ -62,7 +66,6 @@ class FiniteStateMachine(object):
     def set_finishing(self, name):
         state = self.states[name]
         state.set_finishing()
-
 
     def _symbol_collision(self, symbol):
         if (type(symbol) is not tuple and type(symbol) is not list):
@@ -89,7 +92,7 @@ class FiniteStateMachine(object):
 
             if name not in self.states:
                 self.add_state(name)
-            if finishing:    
+            if finishing:
                 self.set_finishing(name)
 
             for target in conf[state]:
@@ -107,8 +110,9 @@ class FiniteStateMachine(object):
 
     def step(self, char):
         if self.line_comment == char:
-            self.in_line_comment = True
-            return self.current
+            if self.current.get_name() != "left_ap":
+                self.in_line_comment = True
+                return self.current
         if self.in_line_comment:
             if char == "\n":
                 self.in_line_comment = False

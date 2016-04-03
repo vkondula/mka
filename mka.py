@@ -4,8 +4,10 @@
 import os
 import sys
 import argparse
+import stateMachine
 from configparser import ConfigParser
 from stateMachine import FiniteStateMachine as FST
+
 
 def parse_args(parser):
     group = parser.add_mutually_exclusive_group()
@@ -72,17 +74,39 @@ def parse_args(parser):
             return 3
     return args
 
+
+def input_parsing_fst(conf_path, starting_state, fd, until_eof):
+    state_fst = FST(rules_only=True)
+    conf = ConfigParser()
+    conf.read(conf_path)
+    state_fst.build_from_config(conf)
+    state_fst.set_starting(starting_state)
+    while not state_fst.is_finishing() or until_eof:
+        char = fd.read(1)
+        if char == "":
+            break
+        state_fst.step(char)
+    if not state_fst.is_finishing():
+        raise stateMachine.NotFinishing()
+    return state_fst.get_output()
+
+
 def main(args):
     if not args.rules_only:
-        state_fst = FST(rules_only=True)
-        conf = ConfigParser()
-        conf.read("state.conf")
-        state_fst.build_from_config(conf)
-        state_fst.set_starting("start")
-        state_fst.read_string("(  {ad,q1_q1 , wqe#fml\n,e}")
-        print(state_fst.get_output())
-        print("is finishing: %s" %state_fst.is_finishing())
-        print(state_fst.current.get_name())
+        states = input_parsing_fst(
+            "state.conf", "start", args.input, False)
+        list_of_states = states.get("1", [])
+
+        alphabet = input_parsing_fst(
+            "alphabet.conf", "start", args.input, False)
+        list_of_symbols = alphabet.get("2", [])
+
+        rules = input_parsing_fst("rules.conf", "start", args.input, False)
+
+        print(list_of_states)
+        print(list_of_symbols)
+        print(rules)
+
     return 0
 
 if __name__ == "__main__":
