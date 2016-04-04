@@ -1,6 +1,6 @@
 #!/bin/python3.4
 # coding=utf-8
-#MKA:xkondu00
+# MKA:xkondu00
 import os
 import sys
 import argparse
@@ -102,11 +102,37 @@ def main(args):
         list_of_symbols = alphabet.get("2", [])
 
         rules = input_parsing_fst("rules.conf", "start", args.input, False)
+        list_of_rules = zip(
+            rules.get("state", []),
+            rules.get("target", []),
+            rules.get("symbol", [])
+        )
 
+        finishing = input_parsing_fst("finishing.conf", "start", args.input, True)
+        list_of_finishing = finishing.get("finish", [])
+        start = finishing.get("start").pop()
         print(list_of_states)
         print(list_of_symbols)
-        print(rules)
-
+        print("start: %s" %start)
+        print(list_of_finishing)
+        fst = FST()
+        for item in list_of_states:
+            fst.add_state(item)
+        for item in list_of_symbols:
+            fst.add_symbol(item)
+        for item in list_of_rules:
+            fst.add_rule(item[0], item[1], item[2])
+        fst.set_starting(start)
+        for item in list_of_finishing:
+            print("WTF", item)
+            fst.set_finishing(item)
+        print("is WFSA: %s" %fst.is_WFSA())
+        if not args.find_non_finishing:
+            args.output.write(repr(fst))
+        else:
+            args.output.write(fst.find_non_terminating())
+    args.input.close()
+    args.output.close()
     return 0
 
 if __name__ == "__main__":

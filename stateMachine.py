@@ -1,7 +1,8 @@
 #!/bin/python3.4
 # coding=utf-8
-#MKA:xkondu00
+# MKA:xkondu00
 
+from copy import copy
 
 class Redefinition(BaseException):
     pass
@@ -29,16 +30,21 @@ class FiniteStateMachine(object):
         self.buffer = str()
         self.last_handler = None
         self.output = dict()
+        # for comment in input
         self.line_comment = line_comment
         self.post_comment = post_comment
         self.in_line_comment = False
+        # for WSFA check
+        self.reversed_rules = dict()
+        self.dump_rules = dict()
+        self.finishing = list()
 
-    def add_state(self, name, starting=False, finishing=False):
+    def add_state(self, name, finishing=False):
         if (name in self.states):
             if (self.rules_only):
                 return False
             raise Redefinition(name)
-        self.states[name] = State(name, starting, finishing)
+        self.states[name] = State(name, finishing)
         return True
 
     def add_rule(self, starting, target, symbol, returning=False):
@@ -51,12 +57,14 @@ class FiniteStateMachine(object):
         else:
             self.add_state(starting)
             self.add_state(target)
+            self.add_symbol(symbol)
+        self._add_dump_rule(starting, target)
         symbol = self._symbol_decode(symbol)
         target = self.states[target]
         return self.states[starting].add_rule(symbol, target, returning)
 
     def add_symbol(self, symbol):
-        if (self._symbol_collision(symbol)):
+        if (self._symbol_collision(symbol)) and not self.rules_only:
             raise Redefinition(symbol)
         if type(symbol) is tuple or type(symbol) is list:
             self.alphabet += symbol
@@ -64,6 +72,7 @@ class FiniteStateMachine(object):
             self.alphabet.append(symbol)
 
     def set_finishing(self, name):
+        self.finishing.append(name)
         state = self.states[name]
         state.set_finishing()
 
@@ -103,7 +112,7 @@ class FiniteStateMachine(object):
                     ret = None
                 else:
                     ret = trans[1]
-                self.add_rule(state, target, trans[0], ret)
+                self.add_rule(name, target, trans[0], ret)
 
     def set_starting(self, name):
         self.current = self.states[name]
@@ -124,8 +133,8 @@ class FiniteStateMachine(object):
 
         retval = self.current.step(char)
         if retval is None:
-            raise MissingRule("Missing rule for: %s at state: %s"
-                              % (char, self.current.get_name()))
+            raise MissingRule("Missing rule for: '%s' ord(%s) at state: %s"
+                              % (char, ord(char), self.current.get_name()))
         self.current = retval[0]
         self.handle_output(char, retval[1])
         return retval[0]
@@ -154,18 +163,114 @@ class FiniteStateMachine(object):
     def is_finishing(self):
         return self.current.is_finishing()
 
+    def _add_dump_rule(self, state, target):
+        if state not in self.dump_rules:
+            self.dump_rules[state] = list()
+        if target not in self.dump_rules[state]:
+            self.dump_rules[state].append(target)
+
+        if target not in self.reversed_rules:
+            self.reversed_rules[target] = list()
+        if state not in self.reversed_rules[target]:
+            self.reversed_rules[target].append(state)
+
+    def _all_accessible(self):
+        accessible = list(self.current.get_name())
+        while True:
+            changed = False
+            for state in accessible:
+                targets = self.dump_rules.get(state, [])
+                for target in targets:
+                    if target not in accessible:
+                        accessible.append(target)
+                        changed = True
+            if not changed:
+                break
+        return len(accessible) == len(self.states)
+
+    def is_WFSA(self):
+        starting = list(self.current.get_name())
+        state_count = len(self.states)
+        symbol_count = len(self.alphabet)
+        if not self._all_accessible() or not self.find_non_terminating():
+            return False
+        for state in self.states:
+            if symbol_count != len(self.states[state].rules):
+                return False
+            for symbol in self.states[state].rules:
+                if symbol == "'":
+                    return False
+        return True
+
+    def find_non_terminating(self):
+        """
+        Returns one of:
+            1) name of non-terminating state
+            2) "0" if no non-terminating state exists
+            3) False if more than one non-terminating state exists
+        """
+        starting = copy(self.finishing)
+        while True:
+            changed = False
+            for state in starting:
+                targets = self.reversed_rules.get(state, [])
+                for target in targets:
+                    if target not in starting:
+                        starting.append(target)
+                        changed = True
+            if not changed:
+                break
+        non_terminating = "0"
+        for state in self.states:
+            if state not in starting:
+                if non_terminating == "0":
+                    non_terminating = state
+                else:
+                    return False
+        return non_terminating
+
+    def __repr__(self):
+        # states
+        states = list(self.states.keys())
+        states.sort()
+        states = ", ".join(states)
+        # alphabet
+        self.alphabet.sort()
+        alphabet = list()
+        for symbol in self.alphabet:
+            alphabet.append("'%s'" % symbol)
+        alphabet = ", ".join(alphabet)
+        # rules
+        rules = list()
+        for state_name in self.states:
+            state = self.states[state_name]
+            for symbol in state.rules:
+                target_name = state.rules[symbol][0].get_name()
+                rules.append("%s '%s' -> %s" %
+                             (state_name, symbol, target_name))
+        rules.sort()
+        rules = ",\n".join(rules)
+        # starting
+        starting = self.current.get_name()
+        # finishing
+        self.finishing.sort()
+        finishing = ", ".join(self.finishing)
+        # concatenate
+        return ("(\n{%s},\n{%s},\n{\n%s\n},\n%s,\n{%s}\n)" %
+            (states, alphabet, rules, starting, finishing))
+
+    __str__ = __repr__
 
 class State(object):
 
-    def __init__(self, name, starting, finishing):
+    def __init__(self, name, finishing):
         self.name = name
-        self.starting = starting
         self.finishing = finishing
         self.rules = dict()
 
     def add_rule(self, symbol, target, returning):
         if symbol in self.rules:
-            raise Redefinition("%s in %s" % (symbol in self.name))
+            raise Redefinition("%s in %s" % (symbol, self.name))
         self.rules[symbol] = (target, returning)
 
     def finishing(self):
