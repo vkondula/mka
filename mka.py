@@ -105,10 +105,6 @@ def createFSM(configuration, case_insensitive = False, rules_only = False):
     )
     list_of_finishing = configuration.get("finish", [])
     start = configuration.get("start").pop()
-    print(list_of_states)
-    print(list_of_symbols)
-    print("start: %s" % start)
-    print(list_of_finishing)
     fsm = FSM(rules_only = rules_only)
     # add all states
     for item in list_of_states:
@@ -158,7 +154,10 @@ def main(args):
     except (SM.Invalid) as e:
         sys.stderr.write(" ".join(e.args))
         sys.exit(61)
-
+    except (SM.Nondeterminism) as e:
+        sys.stderr.write(" ".join(e.args))
+        sys.exit(62)
+        
     if args.wsfa:
         # TODO
         pass
@@ -168,8 +167,7 @@ def main(args):
         sys.stderr.write("Not well specified finit automata\n")
         sys.exit(62)
     if args.minimize:
-        # TODO
-        fsm.minimize()
+        fsm = fsm.minimize()
     if args.analyze_string:
         if args.case_insensitive:
             args.analyze_string = args.analyze_string.lower()

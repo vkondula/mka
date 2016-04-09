@@ -3,6 +3,7 @@
 # MKA:xkondu00
 
 from copy import copy
+from itertools import combinations
 
 
 class Redefinition(BaseException):
@@ -18,6 +19,10 @@ class MissingRule(BaseException):
 
 
 class NotFinishing(BaseException):
+    pass
+
+
+class Nondeterminism(BaseException):
     pass
 
 
@@ -88,6 +93,8 @@ class FiniteStateMachine(object):
             raise Redefinition("Multiple states with name: %s" % name, "\n")
 
         self.states[name] = State(name, finishing)
+        if finishing:
+            self.finishing.append(name)
         return True
 
     def add_rule(self, starting_name, target_name, symbol, returning=False):
@@ -170,7 +177,6 @@ class FiniteStateMachine(object):
         return self.current.is_finishing()
 
     def is_WSFA(self):
-        starting = list(self.current.get_name())
         state_count = len(self.states)
         symbol_count = len(self.alphabet)
         if not self._all_accessible() or not self.find_non_terminating():
@@ -211,7 +217,114 @@ class FiniteStateMachine(object):
         return non_terminating
 
     def minimize(self):
-        pass
+        # divide all states on finishing and non-finishing
+        non_finishing = list()
+        for state_name in self.states:
+            if state_name not in self.finishing:
+                non_finishing.append(state_name)
+        states = [copy(self.finishing), non_finishing]
+
+        # divide group, if possible
+        while True:
+            # find group, to divide
+            to_divide = self._find_group_to_divide(states)
+            if to_divide:
+                states.remove(to_divide)
+                new_groups = self._divide_group(to_divide, states)
+                states = states + list(new_groups)
+            else:
+                break
+        # create new finite automata object
+        new_fsm = FiniteStateMachine()
+        starting_name = self.current.get_name()
+        # merge states in same group and add them to new automat
+        for group in states:
+            group.sort()
+            state_name = "_".join(group)
+            finishing = False
+            if group[0] in self.finishing:
+                finishing = True
+            new_fsm.add_state(state_name, finishing=finishing)
+            if starting_name in group:
+                new_fsm.set_starting(state_name)
+        # add all symbols
+        for symbol in self.alphabet:
+            new_fsm.add_symbol(symbol)
+        # add all rules
+        for group in states:
+            group.sort()
+            state_name = "_".join(group)
+            for symbol, target in self.states[group[0]]:
+                for target_group in states:
+                    if target in target_group:
+                        target_group.sort()
+                        target_name = "_".join(target_group)
+                new_fsm.add_rule(state_name, target_name, symbol)
+        # return new minimized FSM
+        return new_fsm
+
+    def _find_group_to_divide(self, states):
+        for group in states:
+            rules = dict()
+            for state_name in group:
+                state = self.states[state_name]
+                for symbol in self.alphabet:
+                    next_state = state.step(symbol)[0].get_name()
+                    for target_group in states:
+                        if next_state in target_group:
+                            target = target_group
+                            break
+                    if symbol in rules:
+                        if rules[symbol] != target:
+                            return group
+                    else:
+                        rules[symbol] = target
+        return None
+
+    def _rules_for_group(self, group, states):
+        rules = dict()
+        for state_name in group:
+            state = self.states[state_name]
+            for symbol in self.alphabet:
+                next_state = state.step(symbol)[0].get_name()
+                for target_group in states:
+                    if next_state in target_group:
+                        target = target_group
+                        break
+                if symbol not in rules:
+                    rules[symbol] = list()
+                if target not in rules[symbol]:
+                    rules[symbol].append(target)
+        return rules
+
+    def _divide_group(self, group, states):
+        for count in range(1, -(-len(group) // 2) + 1):
+            # all combinations of states in group
+            # "-(-len(group) // 2) + 1" equals to roundUP(group_count/2)
+            for tmp_two in combinations(group, count):
+                group_two = list(tmp_two)
+                tmp_states = copy(states)
+                group_one = copy(group)
+                for state in group_two:
+                    group_one.remove(state)
+                tmp_states.append(group_one)
+                tmp_states.append(group_two)
+                rules_one = self._rules_for_group(group_one, tmp_states)
+                rules_two = self._rules_for_group(group_two, tmp_states)
+                if not self._rules_interfere(rules_one, rules_two):
+                    return group_one, group_two
+
+    def _rules_interfere(self, one, two):
+        for symbol in self.alphabet:
+            set_one = set()
+            set_two = set()
+            for target in one[symbol]:
+                set_one.add("_".join(target))
+            for target in two[symbol]:
+                set_two.add("_".join(target))
+            if not set_one.intersection(set_two):
+                return False
+        return True
 
     def step(self, char):
         if self.line_comment == char:
@@ -273,7 +386,7 @@ class FiniteStateMachine(object):
             self.reversed_rules[target].append(state)
 
     def _all_accessible(self):
-        accessible = list(self.current.get_name())
+        accessible = [self.current.get_name(), ]
         while True:
             changed = False
             for state in accessible:
@@ -294,6 +407,10 @@ class State(object):
         self.finishing = finishing
         self.rules = dict()
 
+    def __iter__(self):
+        for symbol in self.rules:
+            yield symbol, self.rules[symbol][0].get_name()
+
     def add_rule(self, symbol, target, returning):
         if symbol in self.rules:
             if target is self.rules[symbol][0]:
@@ -301,7 +418,7 @@ class State(object):
                     return False
                 raise Redefinition("%s in %s" % (symbol, self.name), "\n")
             else:
-                raise Invalid(
+                raise Nondeterminism(
                     "Multiple targets for one symbol... nondeterminism", "\n")
         self.rules[symbol] = (target, returning)
         return True
