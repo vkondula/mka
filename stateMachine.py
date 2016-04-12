@@ -1,6 +1,6 @@
 #!/bin/python3.4
 # coding=utf-8
-# MKA:xkondu00
+#MKA:xkondu00
 
 from copy import copy
 from itertools import combinations
@@ -32,7 +32,6 @@ class FiniteStateMachine(object):
         self,
         rules_only=False,
         line_comment="#",
-        post_comment=" ",
         allow_redefinition=True,
         escape_state="left_ap"
     ):
@@ -47,7 +46,6 @@ class FiniteStateMachine(object):
         self.output = dict()
         # for comment in input
         self.line_comment = line_comment
-        self.post_comment = post_comment
         self.in_line_comment = False
         # for WSFA check
         self.reversed_rules = dict()
@@ -55,6 +53,9 @@ class FiniteStateMachine(object):
         self.finishing = list()
 
     def __repr__(self):
+        """
+        Returns all FSM components in a formated string
+        """
         # states
         states = list(self.states.keys())
         states.sort()
@@ -87,6 +88,11 @@ class FiniteStateMachine(object):
     __str__ = __repr__
 
     def add_state(self, name, finishing=False):
+        """
+        Add new state
+        Raise Redefinition if state with a same name already exists
+        Crate new State object
+        """
         if (name in self.states):
             if self.rules_only or self.can_redef:
                 return False
@@ -98,11 +104,23 @@ class FiniteStateMachine(object):
         return True
 
     def add_rule(self, starting_name, target_name, symbol, returning=False):
+        """
+        Add new rule
+        Raise Invalid if states or symbol in rule doesn't exists
+        Raise Nondeterminism if rule with same starting state and symbol
+            but different target exists
+        Add new rule to starting State object
+        Add new record to self.dump_rules and self.reversed_rules for
+            faster analysis
+        """
         if not self.rules_only:
-            if (starting_name not in self.states or
-                    target_name not in self.states or
-                    symbol not in self.alphabet
-                    ):
+            if (
+                starting_name not in self.states or
+                target_name not in self.states or
+                symbol not in self.alphabet
+            ):
+                if symbol == "'":
+                    raise Nondeterminism("Epsilon transitions", "\n")
                 raise Invalid("Missing state or symbol in definition", "\n")
         else:
             self.add_state(starting_name)
@@ -113,20 +131,32 @@ class FiniteStateMachine(object):
         retval = self.states[starting_name].add_rule(symbol, target, returning)
         if retval:
             self._add_dump_rule(starting_name, target_name)
+        elif not self.can_redef:
+            raise Redefinition("%s in %s" % (symbol, self.name), "\n")
         return retval
 
     def add_symbol(self, symbol):
+        """
+        Add new symbol to alphabet
+        Raise Redefinition if symbol already exists
+        """
         if (self._symbol_collision(symbol)) and not self.rules_only:
             if self.can_redef:
                 return False
             raise Redefinition("Symbol %s already declared" % symbol, "\n")
         if type(symbol) is tuple or type(symbol) is list:
             self.alphabet += symbol
-        else:
+        elif symbol not in self.alphabet:
             self.alphabet.append(symbol)
+        else:
+            return False
         return True
 
     def set_finishing(self, name):
+        """
+        Set State with "name" as finishing
+        Raise Invalid if State with given name doesn't exists
+        """
         if name in self.states:
             self.finishing.append(name)
             state = self.states[name]
@@ -141,12 +171,29 @@ class FiniteStateMachine(object):
         return False
 
     def set_starting(self, name):
+        """
+        Set State with "name" as starting
+        Raise Invalid if State with given name doesn't exists
+        """
         if name in self.states:
             self.current = self.states[name]
         else:
             raise Invalid("Starting state doesn't exists", "\n")
 
     def build_from_config(self, conf):
+        """
+        Add FSM's components from config file.
+        Config must have following structure:
+
+        [start]   # from state start
+        start = a    # go to start with symbol "a"
+        finish = b    # go to finish with symbol "b"
+            handler     # optional handler for capturing sequences
+        [finish.]   # from state finish
+                    # if ends with dot "." then it's finishing state
+        finish = a,b # go to finish with "a" or "b"
+
+        """
         self.rules_only = True
         for state in conf:
             if state == "DEFAULT":
@@ -177,7 +224,6 @@ class FiniteStateMachine(object):
         return self.current.is_finishing()
 
     def is_WSFA(self):
-        state_count = len(self.states)
         symbol_count = len(self.alphabet)
         if not self._all_accessible() or not self.find_non_terminating():
             return False
@@ -217,6 +263,9 @@ class FiniteStateMachine(object):
         return non_terminating
 
     def minimize(self):
+        """
+        Returns new FiniteStateMachine object that is MFA for this one
+        """
         # divide all states on finishing and non-finishing
         non_finishing = list()
         for state_name in self.states:
@@ -327,6 +376,12 @@ class FiniteStateMachine(object):
         return True
 
     def step(self, char):
+        """
+        Take one step from current state with char
+        Set new current state and returns it
+        If char is start of a line comment, then current state
+            is returned. All symbols until LF are ignored.
+        """
         if self.line_comment == char:
             if self.literally not in self.current.get_name():
                 self.in_line_comment = True
@@ -334,7 +389,7 @@ class FiniteStateMachine(object):
         if self.in_line_comment:
             if char == "\n":
                 self.in_line_comment = False
-                return self.step(self.post_comment)
+                return self.step(char)
             return self.current
 
         if not self.current:
@@ -386,6 +441,9 @@ class FiniteStateMachine(object):
             self.reversed_rules[target].append(state)
 
     def _all_accessible(self):
+        """
+        Checks if all states in FSA are accessible
+        """
         accessible = [self.current.get_name(), ]
         while True:
             changed = False
@@ -408,15 +466,17 @@ class State(object):
         self.rules = dict()
 
     def __iter__(self):
+        """
+        Iterates over all rules of this state
+        Returns tuple: (symbol, target_name)
+        """
         for symbol in self.rules:
             yield symbol, self.rules[symbol][0].get_name()
 
     def add_rule(self, symbol, target, returning):
         if symbol in self.rules:
             if target is self.rules[symbol][0]:
-                if can_redef:
-                    return False
-                raise Redefinition("%s in %s" % (symbol, self.name), "\n")
+                return False
             else:
                 raise Nondeterminism(
                     "Multiple targets for one symbol... nondeterminism", "\n")
@@ -427,6 +487,10 @@ class State(object):
         return self.finishing
 
     def step(self, char):
+        """
+        Take one step with char
+        Returns tuple: (new_state, handler)
+        """
         for key in self.rules:
             if type(key) is SymbolGroup:
                 if key(char):
@@ -448,11 +512,18 @@ class State(object):
 
 
 class SymbolGroup(object):
+    """
+    group characters with similar attribute
+    """
 
     def __init__(self, group):
         self.group = group
 
     def __call__(self, char):
+        """
+        Returns True if char belongs to a group
+            False otherwise
+        """
         return {
             "!ALPHA": char.isalpha(),
             "!ALPHANUM": char.isalnum(),
@@ -460,13 +531,16 @@ class SymbolGroup(object):
             "!SPACE": char.isspace(),
             "!LF": char in "\n\r",
             "!SKIP": char not in "\n\r",
-            "!NOTAPOST": char != "'"
+            "!NOTAPOST": char != "'",
+            "!NOTAPOST_CHAR": char not in "'{}()->,.#" and not char.isspace()
         }[self.group]
 
     def __eq__(self, other):
+        # necessary for beeing a key in dictionary and handling duplicity
         if type(other) is not SymbolGroup:
             return False
         return self.group == self.group
 
     def __hash__(self):
+        # necessary for beeing a key in dictionary
         return hash(self.group)

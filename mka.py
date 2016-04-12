@@ -1,6 +1,6 @@
 #!/bin/python3.4
 # coding=utf-8
-# MKA:xkondu00
+#MKA:xkondu00
 import os
 import sys
 import argparse
@@ -14,6 +14,12 @@ WHITE_CHAR_FSM = "white_char.conf"
 
 
 def parse_args(parser):
+    """
+    Handles CLI options using argparse
+    """
+    if "--help" in sys.argv and len(sys.argv) != 2:
+        sys.stderr.write("Incorrect combination of parameters\n")
+        return 1
     group = parser.add_mutually_exclusive_group()
     parser.add_argument(
         "--input",
@@ -27,7 +33,7 @@ def parse_args(parser):
         type=str)
     group.add_argument(
         "-f", "--find-non-finishing",
-        help="Prints out all non finishing states, '0' if no state is found",
+        help="Prints out non finishing state, '0' if no state is found",
         action="store_true")
     group.add_argument(
         "-m", "--minimize",
@@ -56,9 +62,10 @@ def parse_args(parser):
         action="store_true")
     try:
         args = parser.parse_args()
-    except SystemExit:
+    except SystemExit as e:
         # changing return value from 2 to 1
-        sys.exit(1)
+        # return 0 if --help
+        sys.exit(1 if e.code else 0)
     if args.input == "-":
         args.input = sys.stdin
     else:
@@ -81,21 +88,34 @@ def parse_args(parser):
 
 
 def input_parsing_fsm(conf_path, starting_state, fd):
+    """
+    Builds FSM from given config file
+    Reads input from file or stdin
+    Returns: dictionery of FA's components created by handler
+    """
     state_fsm = FSM(rules_only=True)
     conf = ConfigParser()
     conf.read(conf_path)
     state_fsm.build_from_config(conf)
     state_fsm.set_starting(starting_state)
-    while not state_fsm.is_finishing():
+    while True:
         char = fd.read(1)
         if char == "":
             break
         state_fsm.step(char)
     if not state_fsm.is_finishing():
         raise SM.NotFinishing("Lexial or syntax error", "\n")
+    state_fsm.step(" ")
     return state_fsm.get_output()
 
-def createFSM(configuration, case_insensitive = False, rules_only = False):
+
+def createFSM(configuration, case_insensitive=False, rules_only=False):
+    """
+    Creates FSM object and fills it with components.
+
+    parametrs:
+        configuration: FA's components in dictionary
+    """
     list_of_states = configuration.get("state", [])
     list_of_symbols = configuration.get("symbol", [])
     list_of_rules = zip(
@@ -103,16 +123,27 @@ def createFSM(configuration, case_insensitive = False, rules_only = False):
         configuration.get("target", []),
         configuration.get("input", [])
     )
-    list_of_finishing = configuration.get("finish", [])
-    start = configuration.get("start").pop()
-    fsm = FSM(rules_only = rules_only)
+    if not rules_only:
+        start = configuration.get("start").pop()
+        list_of_finishing = configuration.get("finish", [])
+    else:
+        start = configuration.get("current", [])[0]
+        list_of_finishing = configuration.get("finish", [])
+        list_of_finishing = list(set([
+            x[0] for x in zip(
+                configuration.get("target", []),
+                list_of_finishing
+            )
+            if x[1] == "."
+        ]))
+    fsm = FSM(rules_only=rules_only, line_comment=None)
     # add all states
     for item in list_of_states:
         if case_insensitive:
             item = item.lower()
         fsm.add_state(item)
     # add all symbols
-    if not list_of_symbols:
+    if not list_of_symbols and not rules_only:
         raise SM.Invalid("Set of symbols is empty", "\n")
     for item in list_of_symbols:
         if case_insensitive:
@@ -135,9 +166,20 @@ def createFSM(configuration, case_insensitive = False, rules_only = False):
 
 
 def main(args):
+    """
+    1) set correct config file for lexical and syntax analysis
+    2) read input (return 60 if syntax or lexical error)
+    3) create FSM object (return 61 if semantic error)
+    4) check if FSM is well specified (return 62 otherwise)
+    5) based of CLI options evaluate FSM
+        a) write to output
+        b) minimize
+        c) find non finihsing state
+        d) analyze string
+    """
     if args.rules_only:
         fsm_conf = RULES_ONLY_FSM
-    if args.white_char:
+    elif args.white_char:
         fsm_conf = WHITE_CHAR_FSM
     else:
         fsm_conf = CLASSIC_FSM
@@ -157,7 +199,7 @@ def main(args):
     except (SM.Nondeterminism) as e:
         sys.stderr.write(" ".join(e.args))
         sys.exit(62)
-        
+
     if args.wsfa:
         # TODO
         pass
