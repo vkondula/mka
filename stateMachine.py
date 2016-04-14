@@ -119,8 +119,6 @@ class FiniteStateMachine(object):
                 target_name not in self.states or
                 symbol not in self.alphabet
             ):
-                if symbol == "'":
-                    raise Nondeterminism("Epsilon transitions", "\n")
                 raise Invalid("Missing state or symbol in definition", "\n")
         else:
             self.add_state(starting_name)
@@ -272,6 +270,7 @@ class FiniteStateMachine(object):
             if state_name not in self.finishing:
                 non_finishing.append(state_name)
         states = [copy(self.finishing), non_finishing]
+        states = [group for group in states if group]
 
         # divide group, if possible
         while True:
@@ -424,6 +423,8 @@ class FiniteStateMachine(object):
     def read_string(self, string):
         try:
             for char in string:
+                if char == "'":
+                    char = "''"
                 self.step(char)
             return self.is_finishing()
         except MissingRule:

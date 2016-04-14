@@ -13,6 +13,9 @@ RULES_ONLY_FSM = "rules_only.conf"
 WHITE_CHAR_FSM = "white_char.conf"
 
 
+class WrongArgument(BaseException):
+    pass
+
 def parse_args(parser):
     """
     Handles CLI options using argparse
@@ -24,68 +27,92 @@ def parse_args(parser):
     parser.add_argument(
         "--input",
         help="Read from this file instead of stdin",
-        default="-",
+        action="append",
         type=str)
     parser.add_argument(
         "--output",
         help="Write to this file instead of stdout",
-        default="-",
+        action="append",
         type=str)
     group.add_argument(
         "-f", "--find-non-finishing",
         help="Prints out non finishing state, '0' if no state is found",
-        action="store_true")
+        action="append_const",
+        const=True)
     group.add_argument(
         "-m", "--minimize",
         help="Minimize finite state machine",
-        action="store_true")
+        action="append_const",
+        const=True)
     parser.add_argument(
         "-i", "--case-insensitive",
         help="Symbols and state names are case insensitive",
-        action="store_true")
+        action="append_const",
+        const=True)
     parser.add_argument(
         "-w", "--white-char",
         help="Commas can be replaced by white characters",
-        action="store_true")
+        action="append_const",
+        const=True)
     parser.add_argument(
         "-r", "--rules-only",
         help="Expects rules only. First state given is starting",
-        action="store_true")
+        action="append_const",
+        const=True)
     group.add_argument(
         "--analyze-string",
         help="Check if given string can be read by state machine",
         type=str,
-        default=None)
+        action='append',)
     parser.add_argument(
         "--wsfa",
         help="Simple deterministic finite state machine could be given",
-        action="store_true")
+        action="append_const",
+        const=True)
     try:
         args = parser.parse_args()
     except SystemExit as e:
         # changing return value from 2 to 1
         # return 0 if --help
         sys.exit(1 if e.code else 0)
-    if args.input == "-":
+    # checking duplicity of arguments
+    for key in args.__dict__:
+        args.__dict__[key] = argument_param(args.__dict__[key], None)
+    # setting input stream
+    if args.input is None or args.input == "-":
         args.input = sys.stdin
     else:
         try:
             args.input = os.path.expanduser(args.input)
-            args.input = open(os.path.realpath(args.input), "r")
+            args.input = open(os.path.realpath(args.input),
+                "r", encoding='utf-8')
         except IOError or OSError:
             sys.stderr.write("Could not open file\n")
             return 2
-    if args.output == "-":
+    # setting output stream
+    if args.output is None or args.output == "-":
         args.output = sys.stdout
     else:
         try:
             args.output = os.path.expanduser(args.output)
-            args.output = open(os.path.realpath(args.output), "w")
+            args.output = open(os.path.realpath(args.output),
+                "w", encoding='utf-8')
         except IOError or OSError:
             sys.stderr.write("Could not open file\n")
             return 3
     return args
 
+
+def argument_param(argv, default):
+    if type(argv) == list:
+        if len(argv) != 1:
+            sys.stderr.write("Duplicity of argument\n")
+            sys.exit(1)
+        else:
+            return argv[0]
+    elif type(argv) == bool:
+        return argv
+    return default
 
 def input_parsing_fsm(conf_path, starting_state, fd):
     """
@@ -151,6 +178,8 @@ def createFSM(configuration, case_insensitive=False, rules_only=False):
         fsm.add_symbol(item)
     # add rules
     for item in list_of_rules:
+        if item[2] == "'":
+            raise SM.Nondeterminism("Epsilon transitions", "\n")
         if case_insensitive:
             fsm.add_rule(item[0].lower(), item[1].lower(), item[2].lower())
         else:
