@@ -8,9 +8,9 @@ import stateMachine as SM
 from configparser import ConfigParser
 from stateMachine import FiniteStateMachine as FSM
 
-CLASSIC_FSM = "classic.conf"
-RULES_ONLY_FSM = "rules_only.conf"
-WHITE_CHAR_FSM = "white_char.conf"
+CLASSIC_FSM = "classic.conf.py"
+RULES_ONLY_FSM = "rules_only.conf.py"
+WHITE_CHAR_FSM = "white_char.conf.py"
 
 
 class WrongArgument(BaseException):
