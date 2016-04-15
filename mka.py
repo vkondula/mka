@@ -16,6 +16,7 @@ WHITE_CHAR_FSM = "white_char.conf"
 class WrongArgument(BaseException):
     pass
 
+
 def parse_args(parser):
     """
     Handles CLI options using argparse
@@ -84,8 +85,10 @@ def parse_args(parser):
     else:
         try:
             args.input = os.path.expanduser(args.input)
-            args.input = open(os.path.realpath(args.input),
-                "r", encoding='utf-8')
+            args.input = open(
+                os.path.realpath(args.input),
+                "r", encoding="utf-8"
+                )
         except IOError or OSError:
             sys.stderr.write("Could not open file\n")
             return 2
@@ -95,8 +98,10 @@ def parse_args(parser):
     else:
         try:
             args.output = os.path.expanduser(args.output)
-            args.output = open(os.path.realpath(args.output),
-                "w", encoding='utf-8')
+            args.output = open(
+                os.path.realpath(args.output),
+                "w", encoding="utf-8"
+                )
         except IOError or OSError:
             sys.stderr.write("Could not open file\n")
             return 3
@@ -113,6 +118,7 @@ def argument_param(argv, default):
     elif type(argv) == bool:
         return argv
     return default
+
 
 def input_parsing_fsm(conf_path, starting_state, fd):
     """
