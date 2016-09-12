@@ -1,4 +1,7 @@
-# ------------ READ STATES ------------ 
+# coding=utf-8
+
+#MKA:xkondu00
+# ------------ READ STATES ------------
 
 [start_1]
 start_1 = !SPACE
@@ -148,8 +151,8 @@ target_body_3 = _
 comma_3 = ,
 pre_comma_3 = !SPACE
 start_4 = }
-        
-[target_body_3] 
+
+[target_body_3]
 target_3 = !ALPHANUM
 	target
 target_body_3 = _

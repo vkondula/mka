@@ -421,14 +421,11 @@ class FiniteStateMachine(object):
         return self.output
 
     def read_string(self, string):
-        try:
-            for char in string:
-                if char == "'":
-                    char = "''"
-                self.step(char)
-            return self.is_finishing()
-        except MissingRule:
-            return False
+        for char in string:
+            if char == "'":
+                char = "''"
+            self.step(char)
+        return self.is_finishing()
 
     def _add_dump_rule(self, state, target):
         if state not in self.dump_rules:

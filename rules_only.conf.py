@@ -1,3 +1,6 @@
+# coding=utf-8
+
+#MKA:xkondu00
 # ------------ RULES ONLY ------------ 
 [start_1]
 start_1 = !SPACE
@@ -57,11 +60,11 @@ target_body = _
 comma = ,
 	finish
 pre_comma = !SPACE
-	finish	
+	finish
 pre_comma_4 = .
 	finish
-        
-[target_body] 
+
+[target_body]
 target = !ALPHANUM
 	target
 target_body = _

@@ -248,7 +248,10 @@ def main(args):
     if args.analyze_string:
         if args.case_insensitive:
             args.analyze_string = args.analyze_string.lower()
-        correct = fsm.read_string(args.analyze_string)
+        try:
+            correct = fsm.read_string(args.analyze_string)
+        except SM.MissingRule:
+            return 1
         args.output.write("1" if correct else "0")
     elif not args.find_non_finishing:
         args.output.write(repr(fsm))
